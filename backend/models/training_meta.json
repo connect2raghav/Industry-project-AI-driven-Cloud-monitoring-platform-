@@ -1,0 +1,71 @@
+{
+  "training_mode": "specialist",
+  "features": [
+    "level",
+    "bytes_transferred",
+    "failed_attempts"
+  ],
+  "models": {
+    "iforest": {
+      "model": "iforest",
+      "dataset": "NSL-KDD",
+      "specialises_in": "brute_force, privilege_escalation, port_scan, r2l, u2r",
+      "train_samples": 125973,
+      "contamination": 0.4654171925730117,
+      "p99_bytes_clip": 62854.0,
+      "performance": {
+        "accuracy": 67.25,
+        "precision": 91.31,
+        "recall": 46.93,
+        "f1_score": 62.0,
+        "confusion_matrix": {
+          "tp": 6023,
+          "fp": 573,
+          "fn": 6810,
+          "tn": 9138
+        }
+      }
+    },
+    "knn": {
+      "model": "knn",
+      "dataset": "CICIDS-2017",
+      "specialises_in": "ddos, web_attacks, botnet, infiltration, lateral_movement",
+      "train_samples": 30000,
+      "contamination": 0.27303333333333335,
+      "p99_bytes_clip": 441255511.74807143,
+      "performance": {
+        "accuracy": 76.85,
+        "precision": 100.0,
+        "recall": 13.74,
+        "f1_score": 24.16,
+        "confusion_matrix": {
+          "tp": 295,
+          "fp": 0,
+          "fn": 1852,
+          "tn": 5853
+        }
+      }
+    },
+    "hbos": {
+      "model": "hbos",
+      "dataset": "UNSW-NB15",
+      "specialises_in": "malware, reconnaissance, backdoor, shellcode, worms",
+      "train_samples": 56000,
+      "contamination": 0.2875714285714286,
+      "p99_bytes_clip": 27332.69927413445,
+      "performance": {
+        "accuracy": 100.0,
+        "precision": 100.0,
+        "recall": 100.0,
+        "f1_score": 100.0,
+        "confusion_matrix": {
+          "tp": 3896,
+          "fp": 0,
+          "fn": 0,
+          "tn": 10104
+        }
+      }
+    }
+  },
+  "scoring_strategy": "Each event is scored by all 3 specialist models. Final score = max(iforest, knn, hbos). Detected_by = model with highest score."
+}
