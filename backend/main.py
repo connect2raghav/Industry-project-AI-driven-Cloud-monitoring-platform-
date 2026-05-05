@@ -1,6 +1,7 @@
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from fastapi.websockets import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 import uvicorn
@@ -11,12 +12,13 @@ import csv
 import io
 import sys
 import os
+import traceback
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from simulator.wazuh_simulator import simulate_session
 from simulator.wazuh_reader import read_wazuh_logs, get_wazuh_status, is_wazuh_available
-from simulator.attack_simulator import run_attack_simulation, run_full_simulation, SCENARIOS
+from simulator.attack_simulator import run_attack_simulation, run_full_simulation, SCENARIOS, get_scenario_catalog
 from engines.cspm_engine import run_cspm_scan
 from engines.ciem_engine import run_ciem_scan
 from engines.ml_engine import analyze_events, compare_models, get_model_info
@@ -46,13 +48,34 @@ from engines.alert_engine import send_alert_email
 
 app = FastAPI(title="Advanced Cloud Security API")
 
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Return JSON for unexpected backend failures so the frontend sees the real error."""
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={
+            "status": "error",
+            "detail": str(exc) or exc.__class__.__name__,
+            "path": str(request.url.path),
+        },
+    )
 
 
 # ── Pydantic Models ───────────────────────────────────────────────────────────
@@ -394,7 +417,7 @@ def get_risk_score():
 
 @app.get("/api/simulation/scenarios")
 def list_scenarios():
-    return {"status": "success", "data": list(SCENARIOS.keys())}
+    return {"status": "success", "data": get_scenario_catalog()}
 
 @app.post("/api/simulation/run/{scenario}")
 def run_simulation(scenario: str, intensity: str = "high"):
@@ -413,13 +436,14 @@ def run_simulation(scenario: str, intensity: str = "high"):
             "simulation": {k: v for k, v in sim.items() if k != "events"},
             "detection": {"total_sim_events": len(sim["events"]), "detected_as_anomaly": len(detected),
                           "detection_rate": round(detection_rate, 1), "detection_success": detection_rate > 50},
+            "sample_sim_events": sim["events"][:5],
             "all_analyzed_events": analyzed
         }
     }
 
 @app.post("/api/simulation/full")
-def run_full_attack_simulation():
-    full_sim = run_full_simulation()
+def run_full_attack_simulation(intensity: str = "high"):
+    full_sim = run_full_simulation(intensity)
     all_sim_events = [e for s in full_sim["scenarios"] for e in s["events"]]
     noise = simulate_session(n_normal=80, n_attacks=0)
     all_events = all_sim_events + noise
@@ -434,7 +458,14 @@ def run_full_attack_simulation():
     return {
         "status": "success",
         "data": {
-            "simulation_summary": {"scenarios_run": full_sim["scenarios_run"], "total_attack_events": len(all_sim_events), "total_with_noise": len(all_events)},
+            "simulation_summary": {
+                "simulation_id": full_sim["simulation_id"],
+                "generated_at": full_sim["timestamp"],
+                "intensity": full_sim["intensity"],
+                "scenarios_run": full_sim["scenarios_run"],
+                "total_attack_events": len(all_sim_events),
+                "total_with_noise": len(all_events)
+            },
             "detection": {"detected_as_anomaly": len(detected), "detection_rate": round(detection_rate, 1), "detection_success": detection_rate > 50},
             "risk_score": {"unified": risk["unified_risk_score"], "level": risk["unified_risk_level"], "components": {k: v["score"] for k, v in risk["components"].items()}},
             "auto_remediation": {"triggered": remediation["remediations_triggered"], "completed": remediation["summary"]["fully_completed"]},

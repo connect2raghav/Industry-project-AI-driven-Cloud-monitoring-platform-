@@ -86,6 +86,17 @@ def _safe(v) -> float:
         return 0.0
     return float(v)
 
+def _json_safe_value(v):
+    if isinstance(v, (np.floating, float)):
+        if np.isnan(v) or np.isinf(v):
+            return None
+        return float(v)
+    if isinstance(v, (np.integer, int)):
+        return int(v)
+    if isinstance(v, (np.bool_, bool)):
+        return bool(v)
+    return v
+
 
 def _severity(score: float) -> str:
     if score > 0.9:   return "Critical"
@@ -155,7 +166,7 @@ def analyze_events(events: List[Dict]) -> List[Dict]:
     for idx, row in df.iterrows():
         score    = _safe(float(final_scores[idx]))
         is_anom  = score > threshold
-        rec      = row.to_dict()
+        rec      = {k: _json_safe_value(v) for k, v in row.to_dict().items()}
         rec["ml_anomaly_score"] = round(score, 4)
         rec["is_anomaly"]       = bool(is_anom)
         rec["ml_severity"]      = _severity(score)
